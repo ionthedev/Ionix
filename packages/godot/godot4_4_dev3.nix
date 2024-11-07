@@ -37,7 +37,7 @@ stdenv.mkDerivation rec {
     owner = "godotengine";
     repo = "godot";
     rev = "f4af8201bac157b9d47e336203d3e8a8ef729de2";
-    hash = "sha256-K9AWkLnWCyIXPkFUkdAJbJuldrrrOX/8Ysun2iIdelI=";
+    hash = "sha256-ELOdePMqqrkejdkld8/7bxMFqBQ+PIZhAF4aGQPjO90=";
   };
 
   nativeBuildInputs = [
