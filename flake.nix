@@ -17,26 +17,42 @@
       {
         packages = rec {
           godot4_4_dev3 = pkgs.callPackage ./packages/godot/godot4_4_dev3.nix {
-            speech-dispatcher = pkgs.speech-dispatcher;
+            inherit (pkgs) speech-dispatcher;
           };
           godot4_4_dev3_mono = pkgs.callPackage ./packages/godot/godot4_4_dev3_mono.nix {
-            speech-dispatcher = pkgs.speech-dispatcher;
-            mono = pkgs.mono;
-            dotnet-sdk_8 = pkgs.dotnet-sdk_8;
-            dotnet-runtime_8 = pkgs.dotnet-runtime_8;
+            inherit (pkgs)
+              speech-dispatcher
+              mono
+              dotnet-sdk_8
+              dotnet-runtime_8;
           };
           default = godot4_4_dev3;
         };
       }
     ) // {
-      overlays.default = final: prev: {
-        godot4_4_dev3 = self.packages.${prev.system}.godot4_4_dev3;
-        godot4_4_dev3_mono = self.packages.${prev.system}.godot4_4_dev3_mono;
+      overlays.default = final: prev: let
+        pkgs = import nixpkgs {
+          system = prev.system;
+          config.allowUnfree = true;
+        };
+      in {
+        godot4_4_dev3 = pkgs.callPackage ./packages/godot/godot4_4_dev3.nix {
+          inherit (pkgs) speech-dispatcher;
+        };
+        godot4_4_dev3_mono = pkgs.callPackage ./packages/godot/godot4_4_dev3_mono.nix {
+          inherit (pkgs)
+            speech-dispatcher
+            mono
+            dotnet-sdk_8
+            dotnet-runtime_8;
+        };
       };
 
-      homeManagerModules.default = { pkgs, ... }: {
+      homeManagerModules.default = { config, pkgs, ... }: {
         nixpkgs.overlays = [ self.overlays.default ];
-        nixpkgs.config.allowUnfree = true;
+        nixpkgs.config = {
+          allowUnfree = true;
+        };
       };
     };
 }
