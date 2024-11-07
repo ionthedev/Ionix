@@ -14,7 +14,7 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
     url = "https://downloads.tuxfamily.org/godotengine/4.4/dev3/mono/Godot_v4.4-dev3_mono_linux_x86_64.zip";
-    sha256 = ""; # We'll need to fill this in after first attempt
+    sha256 = "K9AWkLnWCyIXPkFUkdAJbJuldrrrOX/8Ysun2iIdelI="; # We'll need to fill this in after first attempt
   };
 
   nativeBuildInputs = [
