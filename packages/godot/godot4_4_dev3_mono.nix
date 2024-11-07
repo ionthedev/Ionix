@@ -1,74 +1,198 @@
+# Taken from https://github.com/NixOS/nixpkgs/pull/285941 and updated to latest stable
+# Thanks to ilikefrogs101 for the original PR!
 { lib
 , stdenv
-, fetchurl
-, makeWrapper
-, unzip
+, fetchFromGitHub
+, pkg-config
+, autoPatchelfHook
+, installShellFiles
+, scons
+, python3
+, mkNugetDeps
+, vulkan-loader
+, libGL
+, libX11
+, libXcursor
+, libXinerama
+, libXext
+, libXrandr
+, libXrender
+, libXi
+, libXfixes
+, libxkbcommon
+, alsa-lib
+, libpulseaudio
+, dbus
+, speechd
+, fontconfig
+, udev
+, wayland-scanner
+, withPlatform ? "linuxbsd"
+, withTarget ? "editor"
+, withPrecision ? "single"
+, withPulseaudio ? true
+, withDbus ? true
+, withSpeechd ? true
+, withFontconfig ? true
+, withUdev ? true
+, deps ? ./deps.nix
 , mono
+, callPackage
 , dotnet-sdk_8
 , dotnet-runtime_8
+, makeWrapper
+, msbuild
+,
 }:
-
+assert lib.asserts.assertOneOf "withPrecision" withPrecision [ "single" "double" ];
 stdenv.mkDerivation rec {
-  pname = "godot4-4-dev3-mono";  # Changed from godot4-mono to be more specific
-  version = "4.4-dev3";
+  pname = "godot_4-mono";
+  version = "4.3-stable";
+  commitHash = "f4af8201bac157b9d47e336203d3e8a8ef729de2";
+  sourceHash = "sha256-ELOdePMqqrkejdkld8/7bxMFqBQ+PIZhAF4aGQPjO90=";
 
-  src = fetchurl {
-    url = "https://downloads.tuxfamily.org/godotengine/4.4/dev3/mono/Godot_v4.4-dev3_mono_linux_x86_64.zip";
-    sha256 = "K9AWkLnWCyIXPkFUkdAJbJuldrrrOX/8Ysun2iIdelI=";
+  src = fetchFromGitHub {
+    owner = "godotengine";
+    repo = "godot";
+    rev = commitHash;
+    hash = sourceHash;
   };
 
-  nativeBuildInputs = [ 
-    makeWrapper 
-    unzip
+  keepNugetConfig = deps == null;
+
+  nativeBuildInputs = [
+    pkg-config
+    autoPatchelfHook
+    installShellFiles
+    python3
+    speechd
+    wayland-scanner
+    makeWrapper
+    mono
+    dotnet-sdk_8
+    dotnet-runtime_8
   ];
 
-  buildInputs = [ 
-    mono 
-    dotnet-sdk_8 
-    dotnet-runtime_8 
-  ];
+  buildInputs = [
+    scons
+  ] ++ lib.optional (deps != null)
+    (mkNugetDeps { name = "deps"; nugetDeps = import deps; });
 
-  unpackPhase = ''
-    unzip $src
+  runtimeDependencies =
+    [
+      vulkan-loader
+      libGL
+      libX11
+      libXcursor
+      libXinerama
+      speechd
+      libXext
+      libXrandr
+      libXrender
+      libXi
+      libXfixes
+      libxkbcommon
+      alsa-lib
+      mono
+      wayland-scanner
+      dotnet-sdk_8
+      dotnet-runtime_8
+    ]
+    ++ lib.optional withPulseaudio libpulseaudio
+    ++ lib.optional withDbus dbus
+    ++ lib.optional withDbus dbus.lib
+    ++ lib.optional withSpeechd speechd
+    ++ lib.optional withFontconfig fontconfig
+    ++ lib.optional withFontconfig fontconfig.lib
+    ++ lib.optional withUdev udev;
+
+  enableParallelBuilding = true;
+
+  # Set the build name which is part of the version. In official downloads, this
+  # is set to 'official'. When not specified explicitly, it is set to
+  # 'custom_build'. Other platforms packaging Godot (Gentoo, Arch, Flatpack
+  # etc.) usually set this to their name as well.
+  #
+  # See also 'methods.py' in the Godot repo and 'build' in
+  # https://docs.godotengine.org/en/stable/classes/class_engine.html#class-engine-method-get-version-info
+  BUILD_NAME = "chaotic-nyx";
+
+  # Required for the commit hash to be included in the version number.
+  #
+  # `methods.py` reads the commit hash from `.git/HEAD` and manually follows
+  # refs. Since we just write the hash directly, there is no need to emulate any
+  # other parts of the .git directory.
+  #
+  # See also 'hash' in
+  # https://docs.godotengine.org/en/stable/classes/class_engine.html#class-engine-method-get-version-info
+  preConfigure = ''
+    mkdir -p .git
+    echo ${commitHash} > .git/HEAD
+  '';
+
+  outputs = [ "out" "man" ];
+
+  postConfigure = ''
+    echo "Setting up buildhome."
+    mkdir buildhome
+    export HOME="$PWD"/buildhome
+  '';
+
+  buildPhase = ''
+    echo "Starting Build"
+    scons p=${withPlatform} target=${withTarget} precision=${withPrecision} module_mono_enabled=yes mono_glue=no
+
+    echo "Generating Glue"
+    if [[ ${withPrecision} == *double* ]]; then
+        bin/godot.${withPlatform}.${withTarget}.${withPrecision}.x86_64.mono --headless --generate-mono-glue modules/mono/glue
+    else
+        bin/godot.${withPlatform}.${withTarget}.x86_64.mono --headless --generate-mono-glue modules/mono/glue
+    fi
+
+    echo "Building Assemblies"
+    scons p=${withPlatform} target=${withTarget} precision=${withPrecision} module_mono_enabled=yes mono_glue=yes
+
+    echo "Building C#/.NET Assemblies"
+    python modules/mono/build_scripts/build_assemblies.py --godot-output-dir bin --precision=${withPrecision}
   '';
 
   installPhase = ''
     runHook preInstall
+    mkdir -p "$out/bin"
+    cp bin/godot.* $out/bin/godot4-mono
+    cp -r bin/GodotSharp/ $out/bin/
 
-    mkdir -p $out/bin
-    mkdir -p "$out/share/applications"
-    mkdir -p "$out/share/icons/hicolor/scalable/apps"
+    installManPage misc/dist/linux/godot.6
 
-    # Install the binary and data directory
-    cp -r Godot_v4.4-dev3_mono_linux_x86_64/* $out/bin/
-    mv $out/bin/Godot_v4.4-dev3_mono_linux.x86_64 $out/bin/godot4-4-dev3-mono  # Changed binary name
+    mkdir -p "$out"/share/{applications,icons/hicolor/scalable/apps}
+    cp misc/dist/linux/org.godotengine.Godot.desktop "$out/share/applications/org.godotengine.Godot4-Mono.desktop"
+    substituteInPlace "$out/share/applications/org.godotengine.Godot4-Mono.desktop" \
+      --replace-quiet "Exec=godot" "Exec=$out/bin/godot4-mono" \
+      --replace-quiet "Godot Engine" "Godot Engine ${version} (Mono, $(echo "${withPrecision}" | sed 's/.*/\u&/') Precision)"
+    cp icon.svg "$out/share/icons/hicolor/scalable/apps/godot.svg"
+    cp icon.png "$out/share/icons/godot.png"
 
-    # Create desktop entry
-    cat > "$out/share/applications/godot4-4-dev3-mono.desktop" << EOF  # Changed desktop file name
-    [Desktop Entry]
-    Name=Godot Engine 4.4-dev3 (Mono)
-    Comment=Multi-platform 2D and 3D game engine with a feature-rich editor
-    Exec=$out/bin/godot4-4-dev3-mono
-    Icon=godot
-    Terminal=false
-    Type=Application
-    Categories=Development;IDE;
-    EOF
-
-    # Wrap the binary to set required environment variables
-    wrapProgram $out/bin/godot4-4-dev3-mono \
-      --prefix PATH : ${lib.makeBinPath [ mono dotnet-sdk_8 dotnet-runtime_8 ]} \
+    wrapProgram $out/bin/godot4-mono \
       --set DOTNET_ROOT ${dotnet-sdk_8} \
-      --set GODOT_MONO_PREFIX $out/bin
-
+      --prefix PATH : "${lib.makeBinPath [
+      dotnet-sdk_8
+      dotnet-runtime_8
+      mono
+      msbuild
+    ]}"
     runHook postInstall
   '';
 
-  meta = with lib; {
+  meta = {
     homepage = "https://godotengine.org";
-    description = "Free and Open Source 2D and 3D game engine with Mono/C# support (4.4-dev3)";
-    license = licenses.mit;
-    platforms = [ "x86_64-linux" ];
-    mainProgram = "godot4-4-dev3-mono";
+    description = "Free and Open Source 2D and 3D game engine";
+    license = lib.licenses.mit;
+    platforms = [ "i686-linux" "x86_64-linux" "aarch64-linux" ];
+    maintainers = with lib.maintainers; [ dr460nf1r3 ];
+    mainProgram = "godot4-mono";
+  };
+
+  passthru = {
+    make-deps = callPackage ./make-deps.nix { };
   };
 }
