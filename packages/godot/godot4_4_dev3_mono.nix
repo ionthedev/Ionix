@@ -107,6 +107,9 @@ stdenv.mkDerivation rec {
     
     # Set up NuGet packages directory
     mkdir -p $HOME/.nuget/packages
+
+    # Patch project files to use available version
+    find . -name "*.csproj" -type f -exec sed -i 's/6.0.35/6.0.33/g' {} +
     
     # Link the NuGet packages
     ln -s ${nugetDeps}/lib/dotnet/store/* $HOME/.nuget/packages/
@@ -117,6 +120,12 @@ stdenv.mkDerivation rec {
   buildPhase = ''
     runHook preBuild
 
+    # Export additional .NET variables
+    export DOTNET_NOLOGO=1
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1
+    export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+    export DOTNET_ROOT=${dotnet-sdk_8}
+    
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -137,7 +146,14 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    python3 modules/mono/build_scripts/build_assemblies.py --godot-output-dir bin
+    # Set specific versions for dotnet build
+    export FrameworkVersion="6.0.33"
+    export RuntimeVersion="6.0.33"
+    
+    python3 modules/mono/build_scripts/build_assemblies.py \
+      --godot-output-dir bin \
+      --framework-version $FrameworkVersion \
+      --runtime-version $RuntimeVersion
 
     runHook postBuild
   '';
