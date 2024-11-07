@@ -86,12 +86,31 @@ stdenv.mkDerivation rec {
 
   configurePhase = ''
     runHook preConfigure
-    export HOME="$NIX_BUILD_ROOT"
+    
+    # Set HOME to the build directory
+    export HOME=$PWD
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
     export DOTNET_CLI_TELEMETRY_OPTOUT=1
-    # Link the NuGet packages
+    
+    # Create NuGet directory structure in the build directory
+    mkdir -p $HOME/.nuget/NuGet
+    
+    # Create a NuGet.Config file
+    cat > $HOME/.nuget/NuGet/NuGet.Config << EOF
+    <?xml version="1.0" encoding="utf-8"?>
+    <configuration>
+      <packageSources>
+        <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+      </packageSources>
+    </configuration>
+    EOF
+    
+    # Set up NuGet packages directory
     mkdir -p $HOME/.nuget/packages
-    ln -s ${nugetDeps}/lib/dotnet/store $HOME/.nuget/packages
+    
+    # Link the NuGet packages
+    ln -s ${nugetDeps}/lib/dotnet/store/* $HOME/.nuget/packages/
+    
     runHook postConfigure
   '';
 
