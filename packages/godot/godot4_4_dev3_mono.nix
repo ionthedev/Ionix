@@ -102,18 +102,15 @@ stdenv.mkDerivation rec {
 
   enableParallelBuilding = true;
 
-  configurePhase = ''
-    runHook preConfigure
-    
-    # Set HOME to the build directory
+  preConfigure = ''
     export HOME=$PWD
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
     export DOTNET_CLI_TELEMETRY_OPTOUT=1
-    
-    # Create NuGet directory structure in the build directory
+    export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
+    export DOTNET_ROOT=${dotnet-sdk_8}
+
+    # Set up NuGet configuration
     mkdir -p $HOME/.nuget/NuGet
-    
-    # Create a NuGet.Config file
     cat > $HOME/.nuget/NuGet/NuGet.Config << EOF
     <?xml version="1.0" encoding="utf-8"?>
     <configuration>
@@ -122,34 +119,21 @@ stdenv.mkDerivation rec {
       </packageSources>
     </configuration>
     EOF
-    
+
     # Set up NuGet packages directory
     mkdir -p $HOME/.nuget/packages
 
-    # Patch project files to use available version
+    # Patch project files
     find . -name "*.csproj" -type f -exec sed -i 's/6.0.35/6.0.33/g' {} +
     
     # Link the NuGet packages
     ln -s ${nugetDeps}/lib/dotnet/store/* $HOME/.nuget/packages/
-    
-    runHook postConfigure
   '';
 
   buildPhase = ''
     runHook preBuild
 
-    # Export additional .NET variables
-    export DOTNET_NOLOGO=1
-    export DOTNET_CLI_TELEMETRY_OPTOUT=1
-    export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
-    export DOTNET_ROOT=${dotnet-sdk_8}
-    
-    # Patch the .csproj files to use the correct version
-    find . -name "*.csproj" -type f -exec sed -i \
-      -e 's/<TargetFramework>net6.0/<TargetFramework>net6.0-windows/' \
-      -e 's/6.0.35/6.0.33/g' {} +
-
-    # First build pass
+    # First build to get the editor binary with Mono enabled
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -159,10 +143,10 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Generate mono glue
+    # Generate glue sources
     ./bin/godot.linuxbsd.editor.x86_64.mono --headless --generate-mono-glue modules/mono/glue
 
-    # Second build pass
+    # Rebuild with glue
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -172,8 +156,10 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Build assemblies
-    python3 modules/mono/build_scripts/build_assemblies.py --godot-output-dir bin
+    # Build the managed assemblies
+    ./modules/mono/build_scripts/build_assemblies.py \
+      --godot-output-dir ./bin \
+      --godot-platform linuxbsd
 
     runHook postBuild
   '';
@@ -181,13 +167,16 @@ stdenv.mkDerivation rec {
   installPhase = ''
     runHook preInstall
 
+    # Create necessary directories
     mkdir -p $out/bin
-    cp -r bin/* $out/bin/
-    mv $out/bin/godot.* $out/bin/godot4-mono
-
     mkdir -p "$out/share/applications"
     mkdir -p "$out/share/icons/hicolor/scalable/apps"
 
+    # Install the binary and data directory
+    cp -r bin/* $out/bin/
+    mv $out/bin/godot.* $out/bin/godot4-mono
+
+    # Create desktop entry
     cat > "$out/share/applications/godot4-mono.desktop" << EOF
     [Desktop Entry]
     Name=Godot Engine 4.4 (Mono)
@@ -199,9 +188,11 @@ stdenv.mkDerivation rec {
     Categories=Development;IDE;
     EOF
 
+    # Install icons
     cp icon.svg "$out/share/icons/hicolor/scalable/apps/godot.svg"
     cp icon.png "$out/share/icons/godot.png"
 
+    # Wrap the binary to set required environment variables
     wrapProgram $out/bin/godot4-mono \
       --prefix PATH : ${lib.makeBinPath [ mono dotnet-sdk_8 dotnet-runtime_8 ]} \
       --set DOTNET_ROOT ${dotnet-sdk_8} \
