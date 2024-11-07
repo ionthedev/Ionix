@@ -2,10 +2,10 @@
 , stdenv
 , fetchurl
 , makeWrapper
+, unzip  # Add this
 , mono
 , dotnet-sdk_8
 , dotnet-runtime_8
-, speech-dispatcher ? null
 }:
 
 stdenv.mkDerivation rec {
@@ -14,17 +14,18 @@ stdenv.mkDerivation rec {
 
   src = fetchurl {
     url = "https://downloads.tuxfamily.org/godotengine/4.4/dev3/mono/Godot_v4.4-dev3_mono_linux_x86_64.zip";
-    sha256 = "K9AWkLnWCyIXPkFUkdAJbJuldrrrOX/8Ysun2iIdelI="; # We'll need to fill this in after first attempt
+    sha256 = "K9AWkLnWCyIXPkFUkdAJbJuldrrrOX/8Ysun2iIdelI=";
   };
 
-  nativeBuildInputs = [
-    makeWrapper
+  nativeBuildInputs = [ 
+    makeWrapper 
+    unzip  # Add this
   ];
 
-  buildInputs = [
-    mono
-    dotnet-sdk_8
-    dotnet-runtime_8
+  buildInputs = [ 
+    mono 
+    dotnet-sdk_8 
+    dotnet-runtime_8 
   ];
 
   unpackPhase = ''
