@@ -25,9 +25,16 @@
 , mono
 , dotnet-sdk_8
 , dotnet-runtime_8
+, mkNugetDeps
+, callPackage
 }:
 
 let
+  nugetDeps = mkNugetDeps {
+    name = "godot-mono-deps";
+    nugetDeps = import ./deps.nix;
+  };
+
   withPulseaudio = true;
   withDbus = true;
   withSpeechd = speech-dispatcher != null;
@@ -53,6 +60,7 @@ stdenv.mkDerivation rec {
     mono
     dotnet-sdk_8
     dotnet-runtime_8
+    nugetDeps
   ];
 
   buildInputs = [
@@ -76,10 +84,20 @@ stdenv.mkDerivation rec {
 
   enableParallelBuilding = true;
 
+  configurePhase = ''
+    runHook preConfigure
+    export HOME="$NIX_BUILD_ROOT"
+    export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
+    export DOTNET_CLI_TELEMETRY_OPTOUT=1
+    # Link the NuGet packages
+    mkdir -p $HOME/.nuget/packages
+    ln -s ${nugetDeps}/lib/dotnet/store $HOME/.nuget/packages
+    runHook postConfigure
+  '';
+
   buildPhase = ''
     runHook preBuild
 
-    # Initial build with Mono enabled but without glue
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -89,10 +107,8 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Generate Mono glue
     ./bin/godot.linuxbsd.editor.x86_64.mono --headless --generate-mono-glue modules/mono/glue
 
-    # Final build with glue
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -102,7 +118,6 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Build C#/.NET Assemblies
     python3 modules/mono/build_scripts/build_assemblies.py --godot-output-dir bin
 
     runHook postBuild
