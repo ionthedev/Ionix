@@ -19,19 +19,21 @@
 , alsa-lib
 , pulseaudio
 , dbus
-, speech-dispatcher
+, speech-dispatcher ? null
 , fontconfig
 , udev
-, withPulseaudio ? true
-, withDbus ? true
-, withSpeechd ? true
-, withFontconfig ? true
-, withUdev ? true
 , mono
 , dotnet-sdk_8
 , dotnet-runtime_8
 }:
 
+let
+  withPulseaudio = true;
+  withDbus = true;
+  withSpeechd = speech-dispatcher != null;
+  withFontconfig = true;
+  withUdev = true;
+in
 stdenv.mkDerivation rec {
   pname = "godot4-mono";
   version = "4.4-dev3";
@@ -66,20 +68,41 @@ stdenv.mkDerivation rec {
     libXxf86vm
     libxkbcommon
     alsa-lib
-  ] ++ lib.optional withPulseaudio pulseaudio
-    ++ lib.optional withDbus dbus
-    ++ lib.optional withSpeechd speech-dispatcher
-    ++ lib.optional withFontconfig fontconfig
-    ++ lib.optional withUdev udev;
+    pulseaudio
+    dbus
+    fontconfig
+    udev
+  ] ++ lib.optional withSpeechd speech-dispatcher;
 
   enableParallelBuilding = true;
 
   buildPhase = ''
     runHook preBuild
 
-    scons platform=linuxbsd target=editor module_mono_enabled=yes mono_glue=no
+    # Initial build with Mono enabled but without glue
+    scons platform=linuxbsd \
+      target=editor \
+      module_mono_enabled=yes \
+      mono_glue=no \
+      use_pulseaudio=${if withPulseaudio then "yes" else "no"} \
+      use_fontconfig=${if withFontconfig then "yes" else "no"} \
+      use_udev=${if withUdev then "yes" else "no"} \
+      speech_enabled=${if withSpeechd then "yes" else "no"}
+
+    # Generate Mono glue
     ./bin/godot.linuxbsd.editor.x86_64.mono --headless --generate-mono-glue modules/mono/glue
-    scons platform=linuxbsd target=editor module_mono_enabled=yes mono_glue=yes
+
+    # Final build with glue
+    scons platform=linuxbsd \
+      target=editor \
+      module_mono_enabled=yes \
+      mono_glue=yes \
+      use_pulseaudio=${if withPulseaudio then "yes" else "no"} \
+      use_fontconfig=${if withFontconfig then "yes" else "no"} \
+      use_udev=${if withUdev then "yes" else "no"} \
+      speech_enabled=${if withSpeechd then "yes" else "no"}
+
+    # Build C#/.NET Assemblies
     python3 modules/mono/build_scripts/build_assemblies.py --godot-output-dir bin
 
     runHook postBuild
