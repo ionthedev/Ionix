@@ -147,8 +147,9 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Build the managed assemblies
-    ./modules/mono/build_scripts/build_assemblies.py \
+    # Make the build script executable and run it with Python
+    chmod +x modules/mono/build_scripts/build_assemblies.py
+    python3 modules/mono/build_scripts/build_assemblies.py \
       --godot-output-dir ./bin \
       --godot-platform linuxbsd
 
