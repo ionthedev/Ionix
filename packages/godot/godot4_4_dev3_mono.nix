@@ -126,6 +126,12 @@ stdenv.mkDerivation rec {
     export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
     export DOTNET_ROOT=${dotnet-sdk_8}
     
+    # Patch the .csproj files to use the correct version
+    find . -name "*.csproj" -type f -exec sed -i \
+      -e 's/<TargetFramework>net6.0/<TargetFramework>net6.0-windows/' \
+      -e 's/6.0.35/6.0.33/g' {} +
+
+    # First build pass
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -135,8 +141,10 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
+    # Generate mono glue
     ./bin/godot.linuxbsd.editor.x86_64.mono --headless --generate-mono-glue modules/mono/glue
 
+    # Second build pass
     scons platform=linuxbsd \
       target=editor \
       module_mono_enabled=yes \
@@ -146,14 +154,8 @@ stdenv.mkDerivation rec {
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Set specific versions for dotnet build
-    export FrameworkVersion="6.0.33"
-    export RuntimeVersion="6.0.33"
-    
-    python3 modules/mono/build_scripts/build_assemblies.py \
-      --godot-output-dir bin \
-      --framework-version $FrameworkVersion \
-      --runtime-version $RuntimeVersion
+    # Build assemblies
+    python3 modules/mono/build_scripts/build_assemblies.py --godot-output-dir bin
 
     runHook postBuild
   '';
