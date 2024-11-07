@@ -13,19 +13,21 @@
             allowUnfree = true;
           };
         };
+
+        commonArgs = {
+          inherit (pkgs)
+            mono
+            dotnet-sdk_8
+            dotnet-runtime_8;
+          speech-dispatcher = null;  # Make it optional
+        };
       in
       {
         packages = rec {
           godot4_4_dev3 = pkgs.callPackage ./packages/godot/godot4_4_dev3.nix {
-            inherit (pkgs) speech-dispatcher;
+            speech-dispatcher = null;
           };
-          godot4_4_dev3_mono = pkgs.callPackage ./packages/godot/godot4_4_dev3_mono.nix {
-            inherit (pkgs)
-              speech-dispatcher
-              mono
-              dotnet-sdk_8
-              dotnet-runtime_8;
-          };
+          godot4_4_dev3_mono = pkgs.callPackage ./packages/godot/godot4_4_dev3_mono.nix commonArgs;
           default = godot4_4_dev3;
         };
       }
@@ -35,17 +37,19 @@
           system = prev.system;
           config.allowUnfree = true;
         };
-      in {
-        godot4_4_dev3 = pkgs.callPackage ./packages/godot/godot4_4_dev3.nix {
-          inherit (pkgs) speech-dispatcher;
-        };
-        godot4_4_dev3_mono = pkgs.callPackage ./packages/godot/godot4_4_dev3_mono.nix {
+
+        commonArgs = {
           inherit (pkgs)
-            speech-dispatcher
             mono
             dotnet-sdk_8
             dotnet-runtime_8;
+          speech-dispatcher = null;  # Make it optional
         };
+      in {
+        godot4_4_dev3 = pkgs.callPackage ./packages/godot/godot4_4_dev3.nix {
+          speech-dispatcher = null;
+        };
+        godot4_4_dev3_mono = pkgs.callPackage ./packages/godot/godot4_4_dev3_mono.nix commonArgs;
       };
 
       homeManagerModules.default = { config, pkgs, ... }: {
