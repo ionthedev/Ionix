@@ -54,10 +54,13 @@ stdenv.mkDerivation rec {
 
   
 
-  nativeBuildInputs = [
+nativeBuildInputs = [
     scons
     pkg-config
-    python3
+    (python3.withPackages (ps: with ps; [
+      setuptools
+      pip
+    ]))
     makeWrapper
     mono
     dotnet-sdk_8
