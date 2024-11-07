@@ -18,8 +18,9 @@
           inherit (pkgs)
             mono
             dotnet-sdk_8
-            dotnet-runtime_8;
-          speech-dispatcher = null;  # Make it optional
+            dotnet-runtime_8
+            mkNugetDeps;  # Add this
+          speech-dispatcher = null;
         };
       in
       {
@@ -42,8 +43,9 @@
           inherit (pkgs)
             mono
             dotnet-sdk_8
-            dotnet-runtime_8;
-          speech-dispatcher = null;  # Make it optional
+            dotnet-runtime_8
+            mkNugetDeps;  # Add this
+          speech-dispatcher = null;
         };
       in {
         godot4_4_dev3 = pkgs.callPackage ./packages/godot/godot4_4_dev3.nix {
