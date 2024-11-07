@@ -95,10 +95,12 @@ nativeBuildInputs = [
     export DOTNET_CLI_TELEMETRY_OPTOUT=1
     export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
     export DOTNET_ROOT=${dotnet-sdk_8}
+    export DOTNET_CLI_HOME=$HOME
     
     # Set .NET versions
     export FrameworkVersion="6.0.33"
     export RuntimeVersion="6.0.33"
+    export MSBuildSDKsPath="${dotnet-sdk_8}/sdk/8.0.403/Sdks"
 
     # Set up NuGet configuration
     mkdir -p $HOME/.nuget/NuGet
@@ -106,7 +108,8 @@ nativeBuildInputs = [
     <?xml version="1.0" encoding="utf-8"?>
     <configuration>
       <packageSources>
-        <add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" />
+        <clear />
+        <add key="_nix" value="${nugetDeps}/lib/dotnet/store" />
       </packageSources>
     </configuration>
     EOF
@@ -114,12 +117,44 @@ nativeBuildInputs = [
     # Set up NuGet packages directory
     mkdir -p $HOME/.nuget/packages
 
-    # Patch project files
+    # Update all project files to use 6.0.33
     find . -name "*.csproj" -type f -exec sed -i \
-      -e 's/6.0.35/6.0.33/g' \
-      -e 's/<TargetFramework>net6.0/<TargetFramework>net6.0-windows/g' \
+      -e 's/6\.0\.35/6.0.33/g' \
+      -e 's/net6\.0/net6.0-windows/g' \
       {} +
-    
+
+    # Update Directory.Build.props if it exists
+    if [ -f "Directory.Build.props" ]; then
+      sed -i 's/6\.0\.35/6.0.33/g' Directory.Build.props
+    fi
+
+    # Create a global.json to force SDK version
+    cat > global.json << EOF
+    {
+      "sdk": {
+        "version": "8.0.403",
+        "rollForward": "latestPatch"
+      }
+    }
+    EOF
+
+    # Update the build script
+    sed -i \
+      -e 's/Microsoft.NETCore.App.Ref/Microsoft.NETCore.App.Runtime.linux-x64/g' \
+      -e 's/Microsoft.AspNetCore.App.Ref/Microsoft.AspNetCore.App.Runtime.linux-x64/g' \
+      modules/mono/build_scripts/build_assemblies.py
+
+    # Create Microsoft.NETCoreSdk.BundledVersions.props to handle version references
+    mkdir -p ${dotnet-sdk_8}/sdk/8.0.403/Sdks/Microsoft.NET.Sdk/targets/
+    cat > ${dotnet-sdk_8}/sdk/8.0.403/Sdks/Microsoft.NET.Sdk/targets/Microsoft.NETCoreSdk.BundledVersions.props << EOF
+    <Project>
+      <PropertyGroup>
+        <BundledNETCoreAppTargetFrameworkVersion>6.0.33</BundledNETCoreAppTargetFrameworkVersion>
+        <BundledAspNetCoreTargetFrameworkVersion>6.0.33</BundledAspNetCoreTargetFrameworkVersion>
+      </PropertyGroup>
+    </Project>
+    EOF
+
     # Link the NuGet packages
     ln -s ${nugetDeps}/lib/dotnet/store/* $HOME/.nuget/packages/
   '';
@@ -150,8 +185,12 @@ nativeBuildInputs = [
       use_udev=${if withUdev then "yes" else "no"} \
       speech_enabled=${if withSpeechd then "yes" else "no"}
 
-    # Make the build script executable and run it with Python
-    chmod +x modules/mono/build_scripts/build_assemblies.py
+    # Build the managed assemblies with specific version overrides
+    dotnet restore modules/mono/glue/GodotSharp/GodotSharp.sln \
+      --packages $HOME/.nuget/packages \
+      /p:RuntimeFrameworkVersion=6.0.33 \
+      /p:TargetFrameworkVersion=6.0.33
+
     python3 modules/mono/build_scripts/build_assemblies.py \
       --godot-output-dir ./bin \
       --godot-platform linuxbsd
