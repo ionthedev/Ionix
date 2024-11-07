@@ -1,7 +1,6 @@
 { lib
 , stdenv
 , fetchFromGitHub
-, writeText
 , scons
 , pkg-config
 , python3
@@ -53,22 +52,7 @@ stdenv.mkDerivation rec {
     hash = "sha256-ELOdePMqqrkejdkld8/7bxMFqBQ+PIZhAF4aGQPjO90=";
   };
 
-  patches = [
-    (writeText "godot-dotnet-version.patch" ''
-      diff --git a/modules/mono/build_scripts/build_assemblies.py b/modules/mono/build_scripts/build_assemblies.py
-      index a1b1234..b2b1234 100644
-      --- a/modules/mono/build_scripts/build_assemblies.py
-      +++ b/modules/mono/build_scripts/build_assemblies.py
-      @@ -1,6 +1,9 @@
-       import os
-       
-       def build():
-      +    # Force .NET version
-      +    os.environ["FrameworkVersion"] = "6.0.33"
-      +    os.environ["RuntimeVersion"] = "6.0.33"
-           # Rest of the build script...
-    '')
-  ];
+  
 
   nativeBuildInputs = [
     scons
@@ -102,12 +86,16 @@ stdenv.mkDerivation rec {
 
   enableParallelBuilding = true;
 
-  preConfigure = ''
+    preConfigure = ''
     export HOME=$PWD
     export DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=1
     export DOTNET_CLI_TELEMETRY_OPTOUT=1
     export DOTNET_SKIP_FIRST_TIME_EXPERIENCE=1
     export DOTNET_ROOT=${dotnet-sdk_8}
+    
+    # Set .NET versions
+    export FrameworkVersion="6.0.33"
+    export RuntimeVersion="6.0.33"
 
     # Set up NuGet configuration
     mkdir -p $HOME/.nuget/NuGet
@@ -124,7 +112,10 @@ stdenv.mkDerivation rec {
     mkdir -p $HOME/.nuget/packages
 
     # Patch project files
-    find . -name "*.csproj" -type f -exec sed -i 's/6.0.35/6.0.33/g' {} +
+    find . -name "*.csproj" -type f -exec sed -i \
+      -e 's/6.0.35/6.0.33/g' \
+      -e 's/<TargetFramework>net6.0/<TargetFramework>net6.0-windows/g' \
+      {} +
     
     # Link the NuGet packages
     ln -s ${nugetDeps}/lib/dotnet/store/* $HOME/.nuget/packages/
