@@ -1,6 +1,7 @@
 { lib
 , stdenv
 , fetchFromGitHub
+, writeText
 , scons
 , pkg-config
 , python3
@@ -51,6 +52,23 @@ stdenv.mkDerivation rec {
     rev = "f4af8201bac157b9d47e336203d3e8a8ef729de2";
     hash = "sha256-ELOdePMqqrkejdkld8/7bxMFqBQ+PIZhAF4aGQPjO90=";
   };
+
+  patches = [
+    (writeText "godot-dotnet-version.patch" ''
+      diff --git a/modules/mono/build_scripts/build_assemblies.py b/modules/mono/build_scripts/build_assemblies.py
+      index a1b1234..b2b1234 100644
+      --- a/modules/mono/build_scripts/build_assemblies.py
+      +++ b/modules/mono/build_scripts/build_assemblies.py
+      @@ -1,6 +1,9 @@
+       import os
+       
+       def build():
+      +    # Force .NET version
+      +    os.environ["FrameworkVersion"] = "6.0.33"
+      +    os.environ["RuntimeVersion"] = "6.0.33"
+           # Rest of the build script...
+    '')
+  ];
 
   nativeBuildInputs = [
     scons
